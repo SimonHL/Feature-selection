@@ -56,7 +56,8 @@ load('data/fatigue_life_for_vector_machine_zmh.mat');
 [N_Sample, N_dim] = size(train_data);
 
 % 提取alpha
-alpha = calculate_alpha(train_data, train_label, bestc,bestg);
+cmd = ['-q -c ', num2str(bestc), ' -g ', num2str(bestg)];
+alpha = calculate_alpha(train_data, train_label, cmd);
 
 % 计算初始的代价函数矩阵
 H = calculate_H(train_data, train_label, bestg);
@@ -69,10 +70,10 @@ for t=N_dim:-1:2 % 只剩一个时不需要排序
     D=zeros(1,t);
     for i=1:t  % 剩于t个参数，需要计算去掉任意一个时的h矩阵
         A_temp=A;
-%         A_temp(:,i)=[];
-        A_temp(:,i) =  A_temp(randperm(N_Sample),i);
+        A_temp(:,i)=[];
+%         A_temp(:,i) =  A_temp(randperm(N_Sample),i);
         h(:,:,i) = calculate_H(A_temp, train_label, bestg);
-        alpha_h = calculate_alpha(A_temp, train_label, bestc, bestg);
+        alpha_h = calculate_alpha(A_temp, train_label, cmd);
         
         % 计算代价函数的变化
         D(i)=(1/2)*(alpha)'*H*alpha-(1/2)*(alpha_h)'*h(:,:,i)*alpha_h;  
@@ -84,6 +85,6 @@ for t=N_dim:-1:2 % 只剩一个时不需要排序
     feature_index(min_index) = [];
     A = train_data(:, feature_index); 
     H = h(:,:,i);
-    alpha = calculate_alpha(A, train_label, bestc,bestg);
+    alpha = calculate_alpha(A, train_label,cmd);
 end
 feature_removed(1) = feature_index; % 最后一个去掉的特征

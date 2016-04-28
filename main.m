@@ -78,18 +78,20 @@ for i = 1:3  % 对三个物理量的分布特征分别分析
     mean_X(:,i) = mean(data_X);
 end
 
-save('data/pca_data.mat', 'coeff', 'score', 'mean_X', 'data_all_cell','data_index', 'data', 'cell_number','data_all_cell_number');
+save('data/pca_data.mat', 'coeff', 'score', 'mean_X', 'data_all_cell','data_index', 'data', 'cell_number','data_all_cell_number', 'latent');
 
 
 %% 提取出3个物理量分布第1主特征的演变过程
 data_process = zeros(size(data,1),4); % 第一列是循环数，其他3列是3个物理量对主特征的系数
 data_process(:,1) = data(:,1);
-data_process(:,2) = score(:,1,1);
-data_process(:,3) = score(:,1,2);
-data_process(:,4) = score(:,1,3);
+data_process(:,2) = score(:,1,1); % 第1个物理分量的第一个主特征
+data_process(:,3) = score(:,1,2); % 第2个物理分量的第一个主特征
+data_process(:,4) = score(:,1,3); % 第3个物理分量的第一个主特征
 
 figure;   
 charactor = 2; % 第1物理量的主特征变化
+
+% 循环数和第一主特征的关系
 plot(data_process(data_index(1,1):data_index(1,2),1), data_process(data_index(1,1):data_index(1,2),charactor), ...
      data_process(data_index(2,1):data_index(2,2),1), data_process(data_index(2,1):data_index(2,2),charactor), ...
      data_process(data_index(3,1):data_index(3,2),1), data_process(data_index(3,1):data_index(3,2),charactor), ...
@@ -162,10 +164,10 @@ for i = 1:sample_num
 end
 
 
-[y,ps_y] = mapminmax(y_input, min(y_input),max(y_input));
+% [y,ps_y] = mapminmax(y_input, min(y_input),max(y_input));
 [x,ps_x] = mapminmax(x_input, -1,1);
 
-% 通过留1验证选择参数C
+% 选择参数C
 best_cor = 0;
 bestc = 1000;
 for log2c = -10 : 30,
