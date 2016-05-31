@@ -15,6 +15,8 @@
 import numpy as np
 import matplotlib.pyplot as plt 
 from sklearn.decomposition import PCA
+from pandas import Series, DataFrame
+import pandas as pd
 
 def get_data_from_simulation(filename, cell_number) :
     '''
@@ -170,24 +172,29 @@ data_exp_time, data_exp_data = get_exp_data(data_list, cell_number)
 pca_data_all, pca_data_exp, pca_data_list = prepare_data_for_pca(data_list, data_exp_data, use_hist=True)
 
 # PCA 分析
-pca_result_list, pca_result_exp = pca_analysis(pca_data_all, pca_data_exp, pca_data_list, dim_choose=0)
+dim_choose = 2
+pca_result_list, pca_result_exp = pca_analysis(pca_data_all, pca_data_exp, pca_data_list, dim_choose=dim_choose)
 
 #############  绘图部分   ####################
 view_point = 0    # 需要观察的主分量
     
 # 实测数据的位置
-pos = [(data_exp_time[i],  pca_result_exp[i,view_point]) for i in range(len(data_exp_time))]
+pos = [(data_exp_time[i],  pca_result_exp[i,view_point], pca_result_exp[i,view_point+1]) for i in range(len(data_exp_time))]
 pos = np.asarray(pos)
+df = DataFrame(data=pos, columns=["time","x","y"])
+df.to_csv("df_point_dim{}.dat".format(dim_choose))
 
-# 绘图
+# 绘图, 两个主分量随时间的轨迹
+df = DataFrame()
 for i in range(len(pca_result_list)):
-    t = data_list[i][0]  # 仿真的时间
-    y = pca_result_list[i][:,view_point]
-    plt.plot(t, y)
+    t = data_list[i][0]
+    x = pca_result_list[i][:,view_point] 
+    y = pca_result_list[i][:,view_point + 1]
+    df = pd.concat([df, DataFrame({'time':t, "x":x, "y":y, "exp":i*np.ones(x.shape,dtype=np.int8)})])
 
-plt.plot(pos[:,0], pos[:,1], 'ro')
-plt.grid(True)
-plt.show()
+df.to_csv("df_dim{}.dat".format(dim_choose))
+
+
 
 
 

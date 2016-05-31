@@ -2,4 +2,9 @@
 *.dat
 *.mat
 *.log
+*.pdf
+*.tex
+*.aux
+*.spl
+*.out
 /data/
