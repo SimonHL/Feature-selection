@@ -1,49 +1,55 @@
 require(ggplot2)
 require(sn)
+require(data.table)
 
-# load original data
-load("./data/df_data_origin.RData") #df_data_origin
-load("./data/df_data_origin_detail.RData")
-load("./data/df_data_exp.RData")
+### load original data ----
+load("./data/dt_data.RData") #dt_data
+
 get_hist <- function(x, breaks)
 {
   a <- hist(x, breaks=breaks, plot=FALSE)
-  r <- a$density
-  rm(a)
-  gc()
-  r
+  return(a$density)# / length(x)) 
 }
+
+# ----------
 # get hist as features 
 p_dim <- 2
-dp <- as.matrix(df_data_origin[,((p_dim-1)*27000 + 2):(p_dim*27000 + 1)]) # choose matrix 
-breaks <- seq(min(dp), max(dp), length.out = 101)
-hist_features <- apply(dp,1, get_hist, breaks)
-hist_features <- t(hist_features)
+dim_range <- ((p_dim-1)*27000 + 2):(p_dim*27000 + 1) # columns of the specified data
 
-dp <- as.matrix(df_data_exp[,((p_dim-1)*27000 + 2):(p_dim*27000 + 1)]) # choose matrix for exp data 
-hist_features_exp <- t(apply(dp, 1, get_hist, breaks))
+# use "set" for speed
+dp <- as.matrix(dt_data_origin[, dim_range, with=FALSE ]) # choose matrix from simulation data
+breaks <- seq(min(dp), max(dp), length.out = 101)
+hist_features <- as.data.table( matrix(0, nrow(dp), 100  ))
+for (i in 1:nrow(hist_features) )
+{
+  set(hist_features, i, names(hist_features), as.list(get_hist(dp[i,], breaks)) )
+}
+
+dp <- as.matrix(dt_data_exp[,dim_range, with=FALSE]) # choose matrix from exp data
+hist_features_exp <- as.data.table( matrix(0, nrow(dp), 100  ))
+for (i in 1:nrow(hist_features_exp) )
+{
+  set(hist_features_exp, i, names(hist_features_exp), as.list(get_hist(dp[i,], breaks)) )
+}
 
 # principal components analysis
-pca <- prcomp(hist_features)
+pca <- prcomp(hist_features, scale. = T)
 pca_eigenvalues <- pca$sdev**2
-pca_explain_ratio <- sum(pca_eigenvalues[1:2] )/sum(pca_eigenvalues)
-dfl <-hist_features %*% pca$rotation[,1:2]
-dfp <- hist_features_exp %*% pca$rotation[,1:2]
+pca_explain_ratio <- sum(pca_eigenvalues[1:4] )/sum(pca_eigenvalues)
+pca_keep_number <- 2L
+dfl <- predict(pca, hist_features)[,1:pca_keep_number]
+dfp <- predict(pca,hist_features_exp)[,1:pca_keep_number]
+# dfl <- t(t(hist_features)-pca$center) %*% pca$rotation[,1:2]
+# dfp <-t(t(hist_features_exp)-pca$center)  %*% pca$rotation[,1:2]
 
 dfl <- as.data.frame(dfl)
 dfp <- as.data.frame(dfp)
-names(dfl) <- c("x", "y")
-names(dfp) <- c("x", "y")
-# # read data from csv
-# dim <- 1   # 
-# file_point <- paste0("df_point_dim", as.character(dim), ".dat")
-# file_line <- paste0("df_dim", as.character(dim), ".dat")
-# dfp <- read.csv(file_point, header = TRUE)
-# dfl <- read.csv(file_line, header = TRUE)
+names(dfl)[1:2] <- c("x", "y")
+names(dfp)[1:2] <- c("x", "y")
 
-fit <- msn.mle(y=dfp[c("x","y")], opt.method = "BFGS")
+fit <- msn.mle(y=dfp, opt.method = "BFGS")
 
-# claculate the density of parameters
+# claculate the density of parameters, only for plotting contour
 dim_x <- 100
 dim_y <- 100
 x_range <- range(dfl$x)
@@ -55,16 +61,17 @@ names(xy_grid) = c("x","y")
 xy_grid$z <- dmsn(x=xy_grid, dp=fit$dp)
 
 #the probability over time
-dfl$exp <- df_data_origin$Stress
-dfl$time <- df_data_origin[,1]
-dfl$phi <- dmsn(x=dfl[c("x","y")], dp=fit$dp)
+dfl$phi <- dmsn(x=dfl, dp=fit$dp)
+dfl$Exp <- dt_data_origin[,Stress]
+dfl$Time <- dt_data_origin[,V1]
+
+
 
 plot_p <- ggplot(data=dfp, aes(x,y))
 plot_p_c <- plot_p + geom_point(colour="red", size=4)+ geom_contour(data=xy_grid, aes(x=x,y=y,z=z)) 
 
 ar <- arrow(angle = 30, length = unit(0.05, "inches"), ends = "last", type = "open")
-plot_p_c_l <-plot_p_c + geom_path(data=dfl, aes(x,y,colour=factor(exp) ), arrow =ar, size=1 )
+plot_p_c_l <-plot_p_c + geom_path(data=dfl, aes(x,y,colour=factor(Exp) ), arrow =ar, size=1 )
 
-ggplot(data=dfl, aes(time,phi)) + geom_path(aes(colour=factor(exp)), size=1) 
-
+ggplot(data=dfl, aes(Time,phi))  + geom_path(data=dfl, aes(colour=factor(Exp)), size=1) 
 
