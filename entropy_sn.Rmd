@@ -1,0 +1,189 @@
+---
+title: "entropy_sn"
+author: "He Lei"
+date: "2016年6月20日"
+output:
+  ioslides_presentation: default
+  beamer_presentation:
+    includes:
+      in_header: header.tex
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(data.table)
+require(ggplot2)
+require(sn)
+load("./data/dt_hist.RData")
+```
+
+## 原始数据的整理
+
+整理后的原始数据共有2部分构成
+
+* 6次实验对应的仿真数据:
+
+* 8次实验疲劳时对应的数据（根据实验所得寿命从仿真数据中选择）
+
+- 两组数据数据格式相同，每行表示不同的Time，Dim，Stress下的数据，27000维
+
+## 估计数据的分布函数
+
+ 归一化的分布计算方法
+```{r calculate_hist, echo=FALSE}
+get_hist <- function(x, breaks)
+{
+  a <- hist(x, breaks=breaks, plot=FALSE)
+  return(a$counts / length(x)) # sum == 1
+}
+```
+* 对每行数据进行归一化分布函数的计算
+
+* 分布函数用归一化的直方图来近似表示，直方图的箱体数为100
+
+* 最终得到的数据为每一行有103列，除去归一化的直方图处，其余3列表示Time，Dim，Stress
+
+* 过程仿真数据和实验仿真数据分别存储
+
+
+## 用于预测的特征：标准差
+
+* 可以直接从原始数据中进行计算
+
+* 也可以从归一化的分布函数中进行估计（快，近似估计）
+
+
+## 标准差和时间的关系
+```{r std_time, echo=FALSE}
+ggplot(data=hist_features[, .(Dim, Time,Stress, std_value)],
+       aes(x=Time,y=std_value))  +  
+geom_path(size=1,
+          aes(colour=factor(Stress),
+          linetype=Dim)) +
+geom_point(data=hist_features_exp[,.(Dim, Time,Stress,std_value)],
+           aes(x=Time, y=std_value, shape=Dim))
+```
+
+## 标准差之间的相关性
+```{r std_dim1, echo=FALSE}
+md <- melt(hist_features[,.(Time,Dim,Stress, std_value)], c("Time", "Dim","Stress"))
+castd <- dcast(md, Time + Stress ~ variable + Dim)
+plot(castd[, c(-1,-2), with=FALSE])
+```
+
+## 寿命点处的标准差
+```{r std_dim2, echo=FALSE}
+md <- melt(hist_features_exp[,.(Time,Dim,Stress, std_value)], c("Time", "Dim","Stress"))
+castd <- dcast(md, Time + Stress ~ variable + Dim)
+plot(castd[, c(-1,-2), with=FALSE])
+```
+
+## 特征2：熵
+
+为了衡量分布的杂乱程度
+
+$$ H(p) = - \int p \log_a p $$
+
+## 熵和时间的关系
+```{r entropy_time, echo=FALSE}
+ggplot(data=hist_features[, .(Dim, Time,Stress, entropy)],
+       aes(x=Time,y=entropy^3))  +  
+geom_path(size=1,
+          aes(colour=factor(Stress),
+          linetype=Dim)) +
+geom_point(data=hist_features_exp[,.(Dim, Time,Stress,entropy)],
+           aes(x=Time, y=entropy^3, shape=Dim))
+```
+
+## 熵之间的相关性
+
+```{r entropy_dim1, echo=FALSE}
+md <- melt(hist_features[,.(Time,Dim,Stress, entropy)], c("Time", "Dim","Stress"))
+castd <- dcast(md, Time + Stress ~ variable + Dim)
+plot(castd[, c(-1,-2), with=FALSE])
+```
+
+## 寿命点处的熵
+```{r entropy_dim2, echo=FALSE}
+md <- melt(hist_features_exp[,.(Time,Dim,Stress, entropy)], c("Time", "Dim","Stress"))
+castd <- dcast(md, Time + Stress ~ variable + Dim)
+plot(castd[, c(-1,-2), with=FALSE])
+```
+
+## 标准差的分布拟合
+三个物理量的标准差具有强线性相关，因些只取其1进行分析
+```{r sn_std, echo=FALSE}
+f_tmp <- factor(c(1,2,3))
+dim_choosen <- f_tmp[2]  # set the dim to analysis
+dfp <- as.matrix(hist_features_exp[Dim==dim_choosen, std_value])
+fit_std <- msn.mle(y=dfp, opt.method = "BFGS")
+x_grid <- matrix(seq(0,0.1, length.out = 500), nrow=500)
+density_data <- dmsn(x=x_grid, dp=fit_std$dp)
+plot(t(x_grid),density_data,"l")
+```
+
+
+## 熵的分布拟合
+```{r sn_entropy, echo=FALSE}
+dfp <- as.matrix(hist_features_exp[Dim==dim_choosen, entropy^0.1])
+fit_entropy <- msn.mle(y=dfp, opt.method = "BFGS")
+x_grid <- matrix(seq(min(dfp)*0.5,max(dfp)*1.5, length.out = 500), nrow=500)
+density_data <- dmsn(x=x_grid, dp=fit_entropy$dp)
+plot(t(x_grid),density_data,"l")
+```
+
+## 基于标准差的预测
+```{r, echo=FALSE}
+dm <- as.matrix(hist_features[Dim==dim_choosen,std_value])
+den_tmp <- dmsn(x=dm, dp=fit_std$dp)
+hist_features[Dim==dim_choosen,den_std:=den_tmp]
+ggplot(data=hist_features[Dim==dim_choosen],aes(x=Time,y=den_std)) + 
+geom_path(size=1, aes(colour=factor(Stress)), linetype="solid")
+```
+
+## 基于熵的预测
+```{r, echo=FALSE}
+dm <- as.matrix(hist_features[Dim==dim_choosen,entropy^3])
+den_tmp <- dmsn(x=dm, dp=fit_entropy$dp)
+hist_features[Dim==dim_choosen,den_std:=den_tmp]
+ggplot(data=hist_features[Dim==dim_choosen],aes(x=Time,y=den_std)) + 
+geom_path(size=1, aes(colour=factor(Stress)), linetype="solid")
+```
+
+## 特征预测效果比较-交叉验证
+
+```{r}
+exp_std <-1
+exp_entropy <-3
+dfp <- as.matrix(hist_features_exp[Dim==dim_choosen, .(Time, Stress,std_value^exp_std, entropy^exp_entropy)])
+dt_result <-as.data.table(matrix(0,nrow(dfp),3))
+setnames(dt_result,c("ExpTime","StdTime", "EntropyTime"))
+for (i in 1 : nrow(dfp))
+{
+  dfp_train <- dfp[-i,]
+  choosed_stress <- dfp[i,"Stress"]
+  dfl <- as.matrix(hist_features[Dim==dim_choosen & Stress==choosed_stress, .(Time, Stress,std_value^exp_std, entropy^exp_entropy)])
+  fit_std <- msn.mle(y=dfp_train[,3], opt.method = "BFGS")
+  fit_entropy <- msn.mle(y=dfp_train[,4], opt.method = "BFGS")
+  std_den <- dmsn(x=dfl[,3, drop=FALSE], dp=fit_std$dp)
+  entropy_den <- dmsn(x=dfl[,4, drop=FALSE], dp=fit_entropy$dp)
+  std_pre <- dfl[which.max(std_den),"Time"]
+  entropy_pre <- dfl[which.max(entropy_den),"Time"]
+  #print(c(dfp[i,1], std_pre, entropy_pre))
+  set(dt_result, i, names(dt_result), list(dfp[i,1],std_pre,entropy_pre))
+}
+
+dt_result[, StdErr:= 100 * abs(StdTime/ExpTime - 1)]
+dt_result[, EntropyErr:= 100 *abs(EntropyTime/ExpTime - 1)]
+dt_result[, RelativeErr:=  StdErr- EntropyErr]
+dt_result[, c( sum(StdErr)/nrow(dt_result), 
+               sum(EntropyErr)/nrow(dt_result),
+               sum(RelativeErr)/nrow(dt_result)
+               )] # 
+  
+```
+
+
+
+
